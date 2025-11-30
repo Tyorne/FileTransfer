@@ -38,6 +38,7 @@ app.use("/static", express.static(path.join(__dirname, "static")));
 // Serve encrypted files
 app.use("/uploads", express.static(uploadsPath));
 
+// Sessions
 app.use(session(sessionConfig));
 
 // Routes
@@ -46,7 +47,7 @@ app.use("/", dashboardRoutes);
 app.use("/", fileRoutes);
 
 app.listen(PORT, () => {
-  console.log(`Server running at http://localhost:${PORT}`);
+  console.log(`Server running on http://localhost:${PORT}`);
   console.log("NODE_ENV =", process.env.NODE_ENV);
   console.log("Uploads directory:", uploadsPath);
 });

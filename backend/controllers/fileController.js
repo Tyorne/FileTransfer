@@ -123,7 +123,7 @@ module.exports = {
     );
   },
 
-  // -------- PUBLIC SHARED DOWNLOAD (fixed version) --------
+  // -------- PUBLIC SHARED DOWNLOAD --------
   async sharedDownload(req, res) {
     const file = await File.findOne({ encryptedFilename: req.params.id });
     if (!file) return res.send(layout("Error", "<h2>File not found.</h2>"));
