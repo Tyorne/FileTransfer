@@ -1,181 +1,189 @@
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
-const layout = require("../utils/htmlLayout.js");
-const { encrypt, decrypt } = require("../utils/encryption.js");
-const { compress, decompress } = require("../utils/compressor.js");
+
+const { encrypt, decrypt } = require("../utils/encryption");
+const { compress, decompress } = require("../utils/compressor");
 const File = require("../models/File");
+const layout = require("../utils/htmlLayout");
 
-// Decide uploads directory (must match multerConfig)
-const uploadsDir = process.env.NODE_ENV === "production" ? "/tmp/uploads" : path.join(__dirname, "..", "uploads");
-
-if (!fs.existsSync(uploadsDir)) {
-  try { fs.mkdirSync(uploadsDir, { recursive: true }); } catch (e) { /* ignore */ }
-}
+// MUST match server.js + multerConfig.js
+const uploadsDir =
+  process.env.NODE_ENV === "production"
+    ? "/uploads" // Render persistent disk
+    : path.join(__dirname, "..", "uploads"); // local dev
 
 module.exports = {
+  // -------- UPLOAD --------
   async uploadFile(req, res) {
-    if (!req.file) {
-      return res.send(layout("Error", "<h2>No file uploaded.</h2>"));
+    try {
+      if (!req.file) {
+        return res.send(layout("Error", "<h2>No file uploaded.</h2>"));
+      }
+
+      // Multer wrote the raw file here
+      const rawPath = req.file.path; // already the full path
+      const rawBuffer = fs.readFileSync(rawPath);
+
+      // Compress + encrypt
+      const compressed = compress(rawBuffer);
+      const { iv, encrypted, authTag } = encrypt(compressed);
+
+      const encryptedFilename = req.file.filename + ".enc";
+      const encryptedPath = path.join(uploadsDir, encryptedFilename);
+
+      fs.writeFileSync(encryptedPath, encrypted);
+
+      // Delete raw unencrypted file
+      fs.unlinkSync(rawPath);
+
+      // Save metadata in MongoDB
+      await File.create({
+        encryptedFilename,
+        originalName: req.file.originalname,
+        iv,
+        authTag,
+        owner: req.session.userId,
+        size: compressed.length,
+        timestamp: Date.now(),
+        shareToken: null,
+        shareExpires: null
+      });
+
+      res.redirect("/dashboard");
+    } catch (err) {
+      console.error("Upload Error:", err);
+      res.send(layout("Error", "<h2>Upload failed.</h2>"));
     }
-
-    // Use Multer-provided path directly to avoid path mismatches
-    const rawPath = req.file.path;
-    if (!rawPath || !fs.existsSync(rawPath)) {
-      return res.send(layout("Error", "<h2>Uploaded file not found on disk.</h2>"));
-    }
-
-    const rawBuffer = fs.readFileSync(rawPath);
-
-    // Compress then encrypt
-    const compressed = compress(rawBuffer);
-    const { iv, encrypted, authTag } = encrypt(compressed);
-
-    // Where to store encrypted file (same directory as raw file for consistency)
-    const targetDir = path.dirname(rawPath);
-    const encryptedFilename = req.file.filename + ".enc";
-    const encryptedPath = path.join(targetDir, encryptedFilename);
-
-    fs.writeFileSync(encryptedPath, encrypted);
-    // Remove raw file
-    try { fs.unlinkSync(rawPath); } catch (_) {}
-
-    await File.create({
-      encryptedFilename,
-      originalName: req.file.originalname,
-      iv,
-      authTag,
-      owner: req.session.userId,
-      timestamp: Date.now(),
-      size: compressed.length,
-      shareToken: null,
-      shareExpires: null,
-    });
-
-    res.send(
-      layout(
-        "File Uploaded",
-        `
-        <h1>File Encrypted & Stored</h1>
-        <p>Original Name: <strong>${req.file.originalname}</strong></p>
-        <p>Encrypted Name: <strong>${encryptedFilename}</strong></p>
-        <p><a href="/dashboard">Return to Dashboard</a></p>
-        `
-      )
-    );
   },
 
+  // -------- DOWNLOAD --------
   async downloadFile(req, res) {
-    const fileName = req.params.id;
-    const entry = await File.findOne({ encryptedFilename: fileName });
-    if (!entry) return res.send(layout("Error", "<h2>File not found.</h2>"));
+    const file = await File.findOne({ encryptedFilename: req.params.id });
+    if (!file) return res.send(layout("Error", "<h2>File not found.</h2>"));
 
-    // Physical path (encrypted file expected adjacent to uploadsDir)
-    const encryptedPath = path.join(uploadsDir, entry.encryptedFilename);
+    const encryptedPath = path.join(uploadsDir, file.encryptedFilename);
     if (!fs.existsSync(encryptedPath)) {
-      return res.send(layout("Error", "<h2>Encrypted file missing.</h2>"));
+      return res.send(
+        layout("Error", "<h2>Encrypted file missing on server.</h2>")
+      );
     }
-    const encryptedBuffer = fs.readFileSync(encryptedPath);
 
-    const decryptedCompressed = decrypt(encryptedBuffer, entry.iv, entry.authTag);
+    const encryptedBuffer = fs.readFileSync(encryptedPath);
+    const decryptedCompressed = decrypt(
+      encryptedBuffer,
+      file.iv,
+      file.authTag
+    );
     const rawData = decompress(decryptedCompressed);
 
-    res.setHeader("Content-Disposition", `attachment; filename="${entry.originalName}"`);
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="${file.originalName}"`
+    );
     res.send(rawData);
   },
 
+  // -------- SHARE --------
   async shareFile(req, res) {
-    const fileName = req.params.id;
-    const entry = await File.findOne({ encryptedFilename: fileName });
-    if (!entry) return res.send(layout("Error", "<h2>File not found.</h2>"));
-    if (entry.owner !== req.session.userId) {
+    const file = await File.findOne({ encryptedFilename: req.params.id });
+    if (!file) return res.send(layout("Error", "<h2>File not found.</h2>"));
+
+    if (file.owner !== req.session.userId) {
       return res.send(layout("Error", "<h2>You do not own this file.</h2>"));
     }
-    if (!entry.shareToken) {
-      entry.shareToken = crypto.randomBytes(16).toString("hex");
-      entry.shareExpires = Date.now() + 24 * 60 * 60 * 1000;
-      await entry.save();
+
+    if (!file.shareToken) {
+      file.shareToken = crypto.randomBytes(16).toString("hex");
+      file.shareExpires = Date.now() + 24 * 60 * 60 * 1000; // 24h
+      await file.save();
     }
-    const shareLink = `${process.env.BASE_URL || "http://localhost:3000"}/shared/${entry.encryptedFilename}?token=${entry.shareToken}`;
+
+    const baseURL = process.env.BASE_URL || "http://localhost:3000";
+    const shareLink = `${baseURL}/shared/${file.encryptedFilename}?token=${file.shareToken}`;
+
     res.send(
       layout(
         "Share File",
         `
-        <h1>Share Link</h1>
-        <p>Give this link to someone you trust:</p>
-        <p><a href="${shareLink}">${shareLink}</a></p>
-        <p>This link expires in 24 hours.</p>
-        <p><a href="/dashboard">Back to Dashboard</a></p>
+          <h1>Share Link</h1>
+          <p>Give this link to someone you trust:</p>
+          <p><a href="${shareLink}">${shareLink}</a></p>
+          <p>This link expires in 24 hours.</p>
+          <p><a href="/dashboard">Back</a></p>
         `
       )
     );
   },
 
+  // -------- PUBLIC SHARED DOWNLOAD --------
   async sharedDownload(req, res) {
-    const fileName = req.params.id;
+    const file = await File.findOne({ encryptedFilename: req.params.id });
+    if (!file) return res.send(layout("Error", "<h2>File not found.</h2>"));
+
     const token = req.query.token;
-    const entry = await File.findOne({ encryptedFilename: fileName });
-    if (!entry) return res.send(layout("Error", "<h2>File not found.</h2>"));
-    if (!token || token !== entry.shareToken) {
-      return res.send(layout("Error", "<h2>Invalid or missing share token.</h2>"));
+    if (!token || token !== file.shareToken) {
+      return res.send(layout("Error", "<h2>Invalid or missing token.</h2>"));
     }
-    if (entry.shareExpires && Date.now() > entry.shareExpires) {
-      return res.send(layout("Expired", "<h2>This share link has expired.</h2>"));
+
+    if (Date.now() > file.shareExpires) {
+      return res.send(layout("Error", "<h2>This link has expired.</h2>"));
     }
-    const encryptedPath = path.join(uploadsDir, entry.encryptedFilename);
+
+    const encryptedPath = path.join(uploadsDir, file.encryptedFilename);
     if (!fs.existsSync(encryptedPath)) {
-      return res.send(layout("Error", "<h2>Encrypted file missing.</h2>"));
+      return res.send(
+        layout("Error", "<h2>Encrypted file missing on server.</h2>")
+      );
     }
+
     const encryptedBuffer = fs.readFileSync(encryptedPath);
-    const decryptedCompressed = decrypt(encryptedBuffer, entry.iv, entry.authTag);
+    const decryptedCompressed = decrypt(
+      encryptedBuffer,
+      file.iv,
+      file.authTag
+    );
     const rawData = decompress(decryptedCompressed);
-    res.setHeader("Content-Disposition", `attachment; filename="${entry.originalName}"`);
+
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="${file.originalName}"`
+    );
     res.send(rawData);
   },
 
+  // -------- REVOKE SHARE --------
   async revokeShare(req, res) {
-    const fileName = req.params.id;
-    const entry = await File.findOne({ encryptedFilename: fileName });
-    if (!entry) return res.send(layout("Error", "<h2>File not found.</h2>"));
-    if (entry.owner !== req.session.userId) {
+    const file = await File.findOne({ encryptedFilename: req.params.id });
+    if (!file) return res.send(layout("Error", "<h2>File not found.</h2>"));
+
+    if (file.owner !== req.session.userId) {
       return res.send(layout("Error", "<h2>You do not own this file.</h2>"));
     }
-    entry.shareToken = null;
-    entry.shareExpires = null;
-    await entry.save();
-    res.send(
-      layout(
-        "Share Revoked",
-        `
-        <h1>Share link revoked.</h1>
-        <p>This link is no longer valid.</p>
-        <p><a href="/dashboard">Back to Dashboard</a></p>
-        `
-      )
-    );
+
+    file.shareToken = null;
+    file.shareExpires = null;
+    await file.save();
+
+    res.redirect("/dashboard");
   },
 
+  // -------- DELETE --------
   async deleteFile(req, res) {
-    const fileName = req.params.id;
-    const entry = await File.findOne({ encryptedFilename: fileName });
-    if (!entry) return res.send(layout("Error", "<h2>File not found.</h2>"));
-    if (entry.owner !== req.session.userId) {
+    const file = await File.findOne({ encryptedFilename: req.params.id });
+    if (!file) return res.send(layout("Error", "<h2>File not found.</h2>"));
+
+    if (file.owner !== req.session.userId) {
       return res.send(layout("Error", "<h2>You do not own this file.</h2>"));
     }
-    const encryptedPath = path.join(uploadsDir, entry.encryptedFilename);
+
+    const encryptedPath = path.join(uploadsDir, file.encryptedFilename);
     if (fs.existsSync(encryptedPath)) {
-      try { fs.unlinkSync(encryptedPath); } catch (_) {}
+      fs.unlinkSync(encryptedPath);
     }
-    await File.deleteOne({ encryptedFilename: fileName });
-    res.send(
-      layout(
-        "File Deleted",
-        `
-        <h1>File Deleted</h1>
-        <p>${entry.originalName} has been removed.</p>
-        <p><a href="/dashboard">Back to Dashboard</a></p>
-        `
-      )
-    );
-  },
+
+    await File.deleteOne({ encryptedFilename: file.encryptedFilename });
+
+    res.redirect("/dashboard");
+  }
 };

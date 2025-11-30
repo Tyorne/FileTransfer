@@ -5,7 +5,7 @@ const FileSchema = new mongoose.Schema({
   originalName: { type: String, required: true },
   iv: { type: String, required: true },
   authTag: { type: String, required: true },
-  owner: { type: String, required: true }, 
+  owner: { type: String, required: true }, // email
   size: { type: Number, required: true },
   timestamp: { type: Number, default: Date.now },
   shareToken: { type: String, default: null },

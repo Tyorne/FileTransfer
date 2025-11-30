@@ -7,6 +7,12 @@ module.exports = {
     const username = req.session.userId;
     const files = await File.find({ owner: username });
 
-    res.send(layout("Dashboard", dashboardView(username, files.map(f => f.encryptedFilename))));
+    // Pass encrypted filenames (or whole objects if your view supports it)
+    res.send(
+      layout(
+        "Dashboard",
+        dashboardView(username, files)
+      )
+    );
   }
 };

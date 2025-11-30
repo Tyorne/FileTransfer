@@ -1,26 +1,29 @@
 const multer = require("multer");
+const crypto = require("crypto");
 const path = require("path");
 const fs = require("fs");
 
-// Decide persistent directory (controllers mirror this logic)
-const uploadsDir = process.env.NODE_ENV === "production" ? "/tmp/uploads" : path.join(__dirname, "..", "uploads");
+// Same logic as server.js
+const uploadDir =
+  process.env.NODE_ENV === "production"
+    ? "/uploads" // persistent disk mount
+    : path.join(__dirname, "..", "uploads"); // local dev
 
-if (!fs.existsSync(uploadsDir)) {
-	try { fs.mkdirSync(uploadsDir, { recursive: true }); } catch (_) {}
+// Ensure directory exists
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir, { recursive: true });
+  console.log("Multer created upload directory:", uploadDir);
 }
 
 const storage = multer.diskStorage({
-	destination: (req, file, cb) => {
-		cb(null, uploadsDir);
-	},
-	filename: (req, file, cb) => {
-		// Sanitize filename
-		const safe = Date.now() + "-" + file.originalname.replace(/[^a-zA-Z0-9._-]/g, "_");
-		cb(null, safe);
-	},
+  destination: function (req, file, cb) {
+    cb(null, uploadDir);
+  },
+  filename: function (req, file, cb) {
+    const uniqueName =
+      crypto.randomUUID() + path.extname(file.originalname || "");
+    cb(null, uniqueName);
+  }
 });
 
-module.exports = multer({
-	storage,
-	limits: { fileSize: 50 * 1024 * 1024 }, // 50MB limit (adjust as needed)
-});
+module.exports = multer({ storage });
