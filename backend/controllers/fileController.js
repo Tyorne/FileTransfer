@@ -7,11 +7,13 @@ const { compress, decompress } = require("../utils/compressor");
 const File = require("../models/File");
 const layout = require("../utils/htmlLayout");
 
+// Detect Render
+const isRender = !!process.env.RENDER;
+
 // MUST match server.js + multerConfig.js
-const uploadsDir =
-  process.env.NODE_ENV === "production"
-    ? "/uploads" // Render persistent disk
-    : path.join(__dirname, "..", "uploads"); // local dev
+const uploadsDir = isRender
+  ? "/uploads" // Render persistent disk
+  : path.join(__dirname, "..", "uploads"); // local dev
 
 module.exports = {
   // -------- UPLOAD --------
@@ -22,7 +24,9 @@ module.exports = {
       }
 
       // Multer wrote the raw file here
-      const rawPath = req.file.path; // already the full path
+      const rawPath = req.file.path; // full path from multer
+      console.log("Raw upload path:", rawPath);
+
       const rawBuffer = fs.readFileSync(rawPath);
 
       // Compress + encrypt
