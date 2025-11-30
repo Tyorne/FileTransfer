@@ -1,18 +1,26 @@
-// Read the raw uploaded file
-const rawBuffer = fs.readFileSync(req.file.path);
+const multer = require("multer");
+const path = require("path");
+const fs = require("fs");
 
-// Compress
-const compressed = compress(rawBuffer);
+// Decide persistent directory (controllers mirror this logic)
+const uploadsDir = process.env.NODE_ENV === "production" ? "/tmp/uploads" : path.join(__dirname, "..", "uploads");
 
-// Encrypt
-const { iv, encrypted, authTag } = encrypt(compressed);
+if (!fs.existsSync(uploadsDir)) {
+	try { fs.mkdirSync(uploadsDir, { recursive: true }); } catch (_) {}
+}
 
-// Create encrypted filename
-const encryptedFilename = req.file.filename + ".enc";
-const encryptedPath = path.join(uploadsDir, encryptedFilename);
+const storage = multer.diskStorage({
+	destination: (req, file, cb) => {
+		cb(null, uploadsDir);
+	},
+	filename: (req, file, cb) => {
+		// Sanitize filename
+		const safe = Date.now() + "-" + file.originalname.replace(/[^a-zA-Z0-9._-]/g, "_");
+		cb(null, safe);
+	},
+});
 
-// Write encrypted file to disk
-fs.writeFileSync(encryptedPath, encrypted);
-
-// Delete the raw (unencrypted) file
-fs.unlinkSync(req.file.path);
+module.exports = multer({
+	storage,
+	limits: { fileSize: 50 * 1024 * 1024 }, // 50MB limit (adjust as needed)
+});
