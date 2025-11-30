@@ -3,13 +3,17 @@ const crypto = require("crypto");
 const path = require("path");
 const fs = require("fs");
 
-// Same logic as server.js
-const uploadDir =
-  process.env.NODE_ENV === "production"
-    ? "/uploads" // persistent disk mount
-    : path.join(__dirname, "..", "uploads"); // local dev
+// Prefer the Render disk mount if it exists
+const diskPath = "/uploads";
+let uploadDir;
 
-// Ensure directory exists
+if (fs.existsSync(diskPath)) {
+  uploadDir = diskPath; // Render persistent disk
+} else {
+  uploadDir = path.join(__dirname, "..", "uploads"); // Local dev
+}
+
+// Ensure upload directory exists
 if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir, { recursive: true });
   console.log("Multer created upload directory:", uploadDir);

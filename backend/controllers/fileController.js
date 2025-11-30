@@ -7,13 +7,15 @@ const { compress, decompress } = require("../utils/compressor");
 const File = require("../models/File");
 const layout = require("../utils/htmlLayout");
 
-// Detect Render
-const isRender = !!process.env.RENDER;
+// Prefer the Render disk mount if it exists
+const diskPath = "/uploads";
+let uploadsDir;
 
-// MUST match server.js + multerConfig.js
-const uploadsDir = isRender
-  ? "/uploads" // Render persistent disk
-  : path.join(__dirname, "..", "uploads"); // local dev
+if (fs.existsSync(diskPath)) {
+  uploadsDir = diskPath; // Render persistent disk
+} else {
+  uploadsDir = path.join(__dirname, "..", "uploads"); // Local dev
+}
 
 module.exports = {
   // -------- UPLOAD --------
@@ -23,9 +25,10 @@ module.exports = {
         return res.send(layout("Error", "<h2>No file uploaded.</h2>"));
       }
 
-      // Multer wrote the raw file here
-      const rawPath = req.file.path; // full path from multer
+      // Path where Multer wrote the raw file
+      const rawPath = req.file.path; // full path
       console.log("Raw upload path:", rawPath);
+      console.log("uploadsDir used:", uploadsDir);
 
       const rawBuffer = fs.readFileSync(rawPath);
 
@@ -41,7 +44,7 @@ module.exports = {
       // Delete raw unencrypted file
       fs.unlinkSync(rawPath);
 
-      // Save metadata in MongoDB
+      // Save metadata
       await File.create({
         encryptedFilename,
         originalName: req.file.originalname,
@@ -120,7 +123,7 @@ module.exports = {
     );
   },
 
-  // -------- PUBLIC SHARED DOWNLOAD --------
+  // -------- PUBLIC SHARED DOWNLOAD (fixed version) --------
   async sharedDownload(req, res) {
     const file = await File.findOne({ encryptedFilename: req.params.id });
     if (!file) return res.send(layout("Error", "<h2>File not found.</h2>"));
