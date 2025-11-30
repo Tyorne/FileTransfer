@@ -1,27 +1,26 @@
 const multer = require("multer");
+const crypto = require("crypto");
 const path = require("path");
 const fs = require("fs");
 
-// Determine upload path based on environment
-const uploadPath =
+// Choose upload directory based on environment
+const uploadDir =
   process.env.NODE_ENV === "production"
     ? "/opt/render/project/src/uploads"
     : path.join(__dirname, "..", "uploads");
 
-// Ensure upload directory exists
-if (!fs.existsSync(uploadPath)) {
-  fs.mkdirSync(uploadPath, { recursive: true });
-  console.log("Multer created uploads directory:", uploadPath);
+// Ensure directory exists
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir, { recursive: true });
+  console.log("Created multer upload directory:", uploadDir);
 }
 
-// Multer storage engine
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
-    cb(null, uploadPath);
+    cb(null, uploadDir);
   },
   filename: function (req, file, cb) {
-    // Unique filename
-    const uniqueName = `${crypto.randomUUID()}${path.extname(file.originalname)}`;
+    const uniqueName = crypto.randomUUID() + path.extname(file.originalname);
     cb(null, uniqueName);
   }
 });
