@@ -25,8 +25,7 @@ module.exports = {
       }
 
       // Raw temporary file path
-      const rawPath = path.join(uploadsDir, req.file.filename);
-      const rawBuffer = fs.readFileSync(rawPath);
+    const rawBuffer = fs.readFileSync(req.file.path);
 
       // Compress
       const compressed = compress(rawBuffer);
