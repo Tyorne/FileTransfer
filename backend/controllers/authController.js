@@ -1,8 +1,9 @@
+// backend/controllers/authController.js
 const bcrypt = require("bcryptjs");
 const layout = require("../utils/htmlLayout");
 const User = require("../models/User");
 
-// use your existing views – no UI change
+// your existing views – we do NOT change their HTML/CSS
 const loginView = require("../views/login");
 const registerView = require("../views/register");
 
@@ -10,7 +11,6 @@ module.exports = {
   // ----- LOGIN PAGE -----
   showLogin(req, res) {
     const error = req.query.error ? decodeURIComponent(req.query.error) : "";
-    // append a simple error message under your existing UI if needed
     const bodyHtml =
       loginView() +
       (error ? `<p style="color:red; margin-top:1rem;">${error}</p>` : "");
@@ -39,14 +39,15 @@ module.exports = {
         );
       }
 
-      // SUCCESS: store email as session userId (like before)
+      // SUCCESS: store email as session userId
       req.session.userId = user.email;
       console.log("Login success for", email);
-      res.redirect("/dashboard");
+      return res.redirect("/dashboard");
     } catch (err) {
       console.error("Login error:", err);
       return res.redirect(
-        "/login?error=" + encodeURIComponent("Login error, please try again")
+        "/login?error=" +
+          encodeURIComponent("Login error, please try again later")
       );
     }
   },
@@ -86,7 +87,6 @@ module.exports = {
       await User.create({ email, passwordHash });
 
       console.log("Registered new user", email);
-      // send them to login with a success note
       return res.redirect(
         "/login?error=" +
           encodeURIComponent("Registered successfully, please log in")
@@ -95,7 +95,7 @@ module.exports = {
       console.error("Register error:", err);
       return res.redirect(
         "/register?error=" +
-          encodeURIComponent("Registration error, please try again")
+          encodeURIComponent("Registration error, please try again later")
       );
     }
   },

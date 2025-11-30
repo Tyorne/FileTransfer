@@ -1,3 +1,4 @@
+// backend/server.js
 require("dotenv").config();
 
 const express = require("express");
@@ -17,34 +18,20 @@ const PORT = process.env.PORT || 3000;
 // Connect to MongoDB
 connectDB();
 
-// Prefer a Render disk at /uploads if it exists, otherwise use backend/uploads
-const diskPath = "/uploads";
-let uploadsPath;
-
-if (fs.existsSync(diskPath)) {
-  uploadsPath = diskPath; // persistent disk on Render (if mounted here)
-} else {
-  uploadsPath = path.join(__dirname, "uploads"); // local dev / fallback
-}
-
-// Ensure uploads dir exists
+// uploads folder (local or inside container)
+const uploadsPath = path.join(__dirname, "uploads");
 if (!fs.existsSync(uploadsPath)) {
   fs.mkdirSync(uploadsPath, { recursive: true });
   console.log("Server created uploads directory:", uploadsPath);
 }
 
 app.use(express.urlencoded({ extended: true }));
-
-// Static files (CSS, etc.)
 app.use("/static", express.static(path.join(__dirname, "static")));
-
-// Serve encrypted files
 app.use("/uploads", express.static(uploadsPath));
 
-// Sessions
 app.use(session(sessionConfig));
 
-// 👉 Home route: redirect based on whether user is logged in
+// Home: send logged-in users to dashboard, others to login
 app.get("/", (req, res) => {
   if (req.session && req.session.userId) {
     return res.redirect("/dashboard");
