@@ -14,47 +14,30 @@ const dashboardRoutes = require("./routes/dashboardRoutes");
 const fileRoutes = require("./routes/fileRoutes");
 
 const app = express();
-
-// Render sets its own port in production
 const PORT = process.env.PORT || 3000;
 
-// -------------------------------
-// DETERMINE UPLOADS PATH
-// -------------------------------
+// Decide uploads path (must match multerConfig)
 const uploadsPath =
   process.env.NODE_ENV === "production"
-    ? "/opt/render/project/src/uploads"
+    ? "/tmp/uploads"
     : path.join(__dirname, "uploads");
 
-// Ensure uploads directory exists (Render free tier NEEDS this)
+// Make sure uploads dir exists (extra safety)
 if (!fs.existsSync(uploadsPath)) {
   fs.mkdirSync(uploadsPath, { recursive: true });
-  console.log("Created uploads directory:", uploadsPath);
+  console.log("Server created uploads directory:", uploadsPath);
 }
 
-// -------------------------------
-// MIDDLEWARE
-// -------------------------------
 app.use(express.urlencoded({ extended: true }));
-
-// Serve CSS & static assets
 app.use("/static", express.static(path.join(__dirname, "static")));
-
-// Serve uploads directory (encrypted files)
 app.use("/uploads", express.static(uploadsPath));
 
 app.use(session(sessionConfig));
 
-// -------------------------------
-// ROUTES
-// -------------------------------
 app.use("/", authRoutes);
 app.use("/", dashboardRoutes);
 app.use("/", fileRoutes);
 
-// -------------------------------
-// START SERVER
-// -------------------------------
 app.listen(PORT, () => {
   console.log(`Server running at http://localhost:${PORT}`);
   console.log("Uploads directory:", uploadsPath);
