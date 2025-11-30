@@ -18,7 +18,7 @@ const PORT = process.env.PORT || 3000;
 // Connect to MongoDB
 connectDB();
 
-// uploads folder (local or inside container)
+// === Uploads directory (inside the backend folder) ===
 const uploadsPath = path.join(__dirname, "uploads");
 if (!fs.existsSync(uploadsPath)) {
   fs.mkdirSync(uploadsPath, { recursive: true });
@@ -26,12 +26,20 @@ if (!fs.existsSync(uploadsPath)) {
 }
 
 app.use(express.urlencoded({ extended: true }));
+
+// Static assets (CSS, etc.)
 app.use("/static", express.static(path.join(__dirname, "static")));
+
+// Serve encrypted files
 app.use("/uploads", express.static(uploadsPath));
 
+// 🔑 IMPORTANT: tell Express it's behind a proxy so secure cookies work
+app.set("trust proxy", 1);
+
+// Sessions (uses SESSION_SECRET from your env)
 app.use(session(sessionConfig));
 
-// Home: send logged-in users to dashboard, others to login
+// Home: logged-in users → dashboard, others → login
 app.get("/", (req, res) => {
   if (req.session && req.session.userId) {
     return res.redirect("/dashboard");
