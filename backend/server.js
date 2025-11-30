@@ -3,6 +3,7 @@ require("dotenv").config();
 const express = require("express");
 const session = require("express-session");
 const path = require("path");
+const fs = require("fs");
 
 const connectDB = require("./database/connection");
 connectDB();
@@ -14,29 +15,34 @@ const fileRoutes = require("./routes/fileRoutes");
 
 const app = express();
 
-// Required by Render (it assigns its own port)
+// Render sets its own port in production
 const PORT = process.env.PORT || 3000;
 
-// Parse form data
-app.use(express.urlencoded({ extended: true }));
-
 // -------------------------------
-// STATIC FILES
+// DETERMINE UPLOADS PATH
 // -------------------------------
-app.use("/static", express.static(path.join(__dirname, "static")));
-
-// LOCAL DEV: serve uploads from project folder
-// PRODUCTION: serve uploads from Render disk (/uploads)
 const uploadsPath =
   process.env.NODE_ENV === "production"
-    ? "/uploads"
+    ? "/opt/render/project/src/uploads"
     : path.join(__dirname, "uploads");
 
-app.use("/uploads", express.static(uploadsPath));
+// Ensure uploads directory exists (Render free tier NEEDS this)
+if (!fs.existsSync(uploadsPath)) {
+  fs.mkdirSync(uploadsPath, { recursive: true });
+  console.log("Created uploads directory:", uploadsPath);
+}
 
 // -------------------------------
-// SESSION CONFIG
+// MIDDLEWARE
 // -------------------------------
+app.use(express.urlencoded({ extended: true }));
+
+// Serve CSS & static assets
+app.use("/static", express.static(path.join(__dirname, "static")));
+
+// Serve uploads directory (encrypted files)
+app.use("/uploads", express.static(uploadsPath));
+
 app.use(session(sessionConfig));
 
 // -------------------------------
@@ -51,4 +57,5 @@ app.use("/", fileRoutes);
 // -------------------------------
 app.listen(PORT, () => {
   console.log(`Server running at http://localhost:${PORT}`);
+  console.log("Uploads directory:", uploadsPath);
 });

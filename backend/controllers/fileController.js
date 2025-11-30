@@ -8,10 +8,10 @@ const { compress, decompress } = require("../utils/compressor");
 const File = require("../models/File");
 const layout = require("../utils/htmlLayout");
 
-// Determine upload path based on environment
+// Determine upload directory based on environment
 const uploadsDir =
   process.env.NODE_ENV === "production"
-    ? "/uploads"
+    ? "/opt/render/project/src/uploads"
     : path.join(__dirname, "..", "uploads");
 
 module.exports = {
@@ -24,27 +24,25 @@ module.exports = {
         return res.send(layout("Error", "<h2>No file uploaded.</h2>"));
       }
 
-      // Raw file (temp)
+      // Raw temporary file path
       const rawPath = path.join(uploadsDir, req.file.filename);
       const rawBuffer = fs.readFileSync(rawPath);
 
-      // Compress file
+      // Compress
       const compressed = compress(rawBuffer);
 
-      // Encrypt file
+      // Encrypt
       const { iv, encrypted, authTag } = encrypt(compressed);
 
-      // Final encrypted file name
       const encryptedFilename = req.file.filename + ".enc";
       const encryptedPath = path.join(uploadsDir, encryptedFilename);
 
-      // Save encrypted contents
       fs.writeFileSync(encryptedPath, encrypted);
 
-      // Remove raw file
+      // Remove raw unencrypted temporary file
       fs.unlinkSync(rawPath);
 
-      // Store metadata in DB
+      // Save metadata in MongoDB
       await File.create({
         encryptedFilename,
         originalName: req.file.originalname,
@@ -52,7 +50,7 @@ module.exports = {
         authTag,
         owner: req.session.userId,
         size: compressed.length,
-        timestamp: Date.now()
+        timestamp: Date.now(),
       });
 
       res.redirect("/dashboard");
@@ -86,7 +84,7 @@ module.exports = {
   },
 
   // ---------------------------
-  // SHARE FILE
+  // SHARE LINK
   // ---------------------------
   async shareFile(req, res) {
     const file = await File.findOne({ encryptedFilename: req.params.id });
@@ -95,10 +93,10 @@ module.exports = {
     if (file.owner !== req.session.userId)
       return res.send(layout("Error", "<h2>You do not own this file.</h2>"));
 
-    // Generate share token if missing
+    // Generate token if missing
     if (!file.shareToken) {
       file.shareToken = crypto.randomBytes(16).toString("hex");
-      file.shareExpires = Date.now() + 24 * 60 * 60 * 1000; // 24 hrs
+      file.shareExpires = Date.now() + 24 * 60 * 60 * 1000; // 24 hours
       await file.save();
     }
 
@@ -111,7 +109,7 @@ module.exports = {
         "Share File",
         `
           <h1>Share Link</h1>
-          <p>Provide this link to the recipient:</p>
+          <p>Give this link to someone you trust:</p>
           <p><a href="${shareLink}">${shareLink}</a></p>
           <p>This link expires in 24 hours.</p>
           <p><a href="/dashboard">Back</a></p>
@@ -177,7 +175,9 @@ module.exports = {
 
     const encryptedPath = path.join(uploadsDir, file.encryptedFilename);
 
-    if (fs.existsSync(encryptedPath)) fs.unlinkSync(encryptedPath);
+    if (fs.existsSync(encryptedPath)) {
+      fs.unlinkSync(encryptedPath);
+    }
 
     await File.deleteOne({ encryptedFilename: file.encryptedFilename });
 
