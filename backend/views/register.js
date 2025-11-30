@@ -1,16 +1,23 @@
-module.exports = function registerView() {
+module.exports = function registerView(errorMessage = "") {
+  const errorHtml = errorMessage
+    ? `<p style="color:red;">${errorMessage}</p>`
+    : "";
+
   return `
-    <h1>Create Account</h1>
+    <div class="auth-container">
+      <h1>Secure File Transfer Platform</h1>
+      <h2>Register</h2>
+      ${errorHtml}
+      <form method="POST" action="/register">
+        <label>Email:</label><br />
+        <input type="email" name="email" required /><br /><br />
 
-    <form class="form" action="/register" method="POST">
-      <label>Email:</label>
-      <input class="input" type="email" name="email" required>
+        <label>Password:</label><br />
+        <input type="password" name="password" required /><br /><br />
 
-      <label>Password:</label>
-      <input class="input" type="password" name="password" required>
-
-      <button class="button" type="submit">Register</button>
-      <p class="muted">Already have an account? <a href="/login">Login</a></p>
-    </form>
+        <button type="submit">Create Account</button>
+      </form>
+      <p>Already have an account? <a href="/login">Login</a></p>
+    </div>
   `;
 };

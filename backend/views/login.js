@@ -1,16 +1,23 @@
-module.exports = function loginView() {
+module.exports = function loginView(errorMessage = "") {
+  const errorHtml = errorMessage
+    ? `<p style="color:red;">${errorMessage}</p>`
+    : "";
+
   return `
-    <h1>Login</h1>
+    <div class="auth-container">
+      <h1>Secure File Transfer Platform</h1>
+      <h2>Login</h2>
+      ${errorHtml}
+      <form method="POST" action="/login">
+        <label>Email:</label><br />
+        <input type="email" name="email" required /><br /><br />
 
-    <form class="form" action="/login" method="POST">
-      <label>Email:</label>
-      <input class="input" type="email" name="email" required>
+        <label>Password:</label><br />
+        <input type="password" name="password" required /><br /><br />
 
-      <label>Password:</label>
-      <input class="input" type="password" name="password" required>
-
-      <button class="button" type="submit">Login</button>
-      <p class="muted">Don't have an account? <a href="/register">Register</a></p>
-    </form>
+        <button type="submit">Login</button>
+      </form>
+      <p>Don't have an account? <a href="/register">Register</a></p>
+    </div>
   `;
 };
