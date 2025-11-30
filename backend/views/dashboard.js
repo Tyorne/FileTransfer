@@ -12,8 +12,8 @@ module.exports = function dashboardView(username, files) {
     <h2>Your Files</h2>
 
     ${
-      files.length === 0
-        ? "<p class=\"muted\">No files uploaded yet.</p>"
+      !files || files.length === 0
+        ? '<p class="muted">No files uploaded yet.</p>'
         : `
         <ul class="file-list">
           ${files
@@ -21,13 +21,14 @@ module.exports = function dashboardView(username, files) {
               (file) => `
             <li>
               <div>
-                <strong>${file}</strong>
+                <strong>${file.originalName}</strong>
+                <div class="muted" style="font-size:12px;">${new Date(file.timestamp).toLocaleString()}</div>
               </div>
               <div class="actions">
-                <a class="button" href="/download/${file}">Download</a>
-                <a class="button" href="/share/${file}">Share</a>
-                <a class="button" href="/revoke/${file}">Revoke</a>
-                <a class="button red" href="/delete/${file}">Delete</a>
+                <a class="button" href="/download/${file.encryptedFilename}">Download</a>
+                <a class="button" href="/share/${file.encryptedFilename}">Share</a>
+                <a class="button" href="/revoke/${file.encryptedFilename}">Revoke</a>
+                <a class="button red" href="/delete/${file.encryptedFilename}">Delete</a>
               </div>
             </li>
           `
